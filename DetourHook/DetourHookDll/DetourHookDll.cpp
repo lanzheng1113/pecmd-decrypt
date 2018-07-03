@@ -4,7 +4,7 @@
 #include <tchar.h>
 #include <stdio.h>
 #include <regex>
-#include <detours.h>
+#include "detours.h"
 
 #pragma comment(lib, "detours.lib")
 
@@ -12,6 +12,8 @@ using namespace std::regex_constants;
 
 static std::vector<std::pair<std::string, bool> > strings;
 static std::vector<std::string> subprocs;
+
+
 static int (WINAPI *oldMultiByteToWideChar)(UINT CodePage, DWORD dwFlags, LPCCH lpMultiByteStr, int cbMultiByte,
     LPWSTR lpWideCharStr, int cchWideChar) = MultiByteToWideChar;
 
@@ -53,6 +55,7 @@ int WINAPI newMultiByteToWideChar(UINT CodePage, DWORD dwFlags, LPCCH lpMultiByt
     return ret;
 }
 
+
 void compose(std::string &script)
 {
     std::string pattern;
@@ -71,9 +74,11 @@ void compose(std::string &script)
         if (it2->second || (!pattern.empty() &&
             std::regex_match(it2->first, std::regex(pattern, ECMAScript | icase)))) {
             script += it2->first;
+			script += "\n";
         }
     }
 }
+
 
 bool save(const std::string &script)
 {
@@ -91,12 +96,58 @@ bool save(const std::string &script)
     return true;
 }
 
+typedef int(*oldUnknowFunTypeExecACmd)(DWORD Unknow1, LPCWSTR Str, LPVOID Unknow2, LPVOID Unknow3, LPVOID Unknow4);
+oldUnknowFunTypeExecACmd pFunOldUnknow = (oldUnknowFunTypeExecACmd)(0x1400363D8);
+int newUnknowFun_ExecACmd(DWORD Unknow1, LPCWSTR Str, LPVOID Unknow2, LPVOID Unknow3, LPVOID Unknow4)
+{
+	int ret = pFunOldUnknow(Unknow1,Str, Unknow2, Unknow3, Unknow4);
+	if (Str)
+	{
+		char recordstr[1024] = { 0 };
+		WideCharToMultiByte(CP_ACP, 0, Str, -1, recordstr, sizeof(recordstr), NULL, NULL);
+		strings.push_back(std::make_pair(recordstr,true));
+	}
+	return ret;
+}
+
+typedef int(*oldUnknowFunAllContents)(DWORD Unknow1, LPCWSTR Str, LPVOID Unknow2, LPVOID Unknow3);
+oldUnknowFunAllContents pFunOldAllContents = (oldUnknowFunAllContents)(0x1400992A0);
+int newUnknowFun_AllContents(DWORD Unknow1, LPCWSTR Str, LPVOID Unknow2, LPVOID Unknow3)
+{
+	int ret = pFunOldAllContents(Unknow1, Str, Unknow2, Unknow3);
+	if (Str)
+	{
+		char recordstr[1024] = { 0 };
+		WideCharToMultiByte(CP_ACP, 0, Str, -1, recordstr, sizeof(recordstr), NULL, NULL);
+		strings.push_back(std::make_pair(recordstr, true));
+	}
+	return ret;
+}
+
+typedef PWCHAR(*oldUnknow3Ft)(DWORD unknow1, DWORD unknow2, DWORD unknow3, DWORD unknow4);
+oldUnknow3Ft pFunOldUnknow3Ft = (oldUnknow3Ft)(0x14001515C);
+PWCHAR newUnknow3(DWORD unknow1, DWORD unknow2, DWORD unknow3, DWORD unknow4)
+{
+	PWCHAR ret = pFunOldUnknow3Ft(unknow1, unknow2, unknow3, unknow4);
+	if (ret && ret[0])
+	{
+		char recordstr[1024] = { 0 };
+		WideCharToMultiByte(CP_ACP, 0, ret, -1, recordstr, sizeof(recordstr), NULL, NULL);
+		strings.push_back(std::make_pair(recordstr, true));
+	}
+	return ret;
+}
+
+
 void hook()
 {
     DetourRestoreAfterWith();
     DetourTransactionBegin();
     DetourUpdateThread(GetCurrentThread());
-    DetourAttach(&(PVOID&)oldMultiByteToWideChar, newMultiByteToWideChar);
+	DetourAttach(&(PVOID&)pFunOldUnknow3Ft, newUnknow3);
+	// DetourAttach(&(PVOID&)pFunOldUnknow, newUnknowFun_ExecACmd);
+	//DetourAttach(&(PVOID&)pFunOldAllContents, newUnknowFun_AllContents);
+	// DetourAttach(&(PVOID&)oldMultiByteToWideChar, newMultiByteToWideChar);
     DetourTransactionCommit();
 }
 
@@ -104,7 +155,10 @@ void unhook()
 {
     DetourTransactionBegin();
     DetourUpdateThread(GetCurrentThread());
-    DetourDetach(&(PVOID&)oldMultiByteToWideChar, newMultiByteToWideChar);
+	DetourDetach(&(PVOID&)pFunOldUnknow3Ft, newUnknow3);
+	//DetourDetach(&(PVOID&)pFunOldAllContents, newUnknowFun_AllContents);
+	//DetourDetach(&(PVOID&)pFunOldUnknow, newUnknowFun_ExecACmd);
+   // DetourDetach(&(PVOID&)oldMultiByteToWideChar, newMultiByteToWideChar);
     DetourTransactionCommit();
 }
 
@@ -122,6 +176,7 @@ BOOL APIENTRY DllMain( HMODULE hModule,
     {
     case DLL_PROCESS_ATTACH:
         {
+			MessageBox(NULL, L"1", NULL, MB_OK);
             hook();
             break;
         }

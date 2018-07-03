@@ -2,7 +2,7 @@
 //
 
 #include "stdafx.h"
-#include <detours.h>
+#include "detours.h"
 
 #pragma comment(lib, "detours.lib")
 
