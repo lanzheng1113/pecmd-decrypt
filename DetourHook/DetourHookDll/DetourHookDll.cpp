@@ -96,6 +96,22 @@ bool save(const std::string &script)
     return true;
 }
 
+bool appendLogFile(const std::string& content)
+{
+	FILE *logFile = NULL;
+	TCHAR logPath[MAX_PATH] = { 0 };
+	GetCurrentDirectory(MAX_PATH, logPath);
+	_tcscat_s(logPath, MAX_PATH, _T("\\original.ini"));
+	_tfopen_s(&logFile, logPath, _T("a+"));
+	if (!logFile) {
+		MessageBoxA(NULL, "failed to save ini file", "Error", MB_OK);
+		return false;
+	}
+	fwrite(content.c_str(), 1, content.size(), logFile);
+	fclose(logFile);
+	return true;
+}
+
 typedef int(*oldUnknowFunTypeExecACmd)(DWORD Unknow1, LPCWSTR Str, LPVOID Unknow2, LPVOID Unknow3, LPVOID Unknow4);
 oldUnknowFunTypeExecACmd pFunOldUnknow = (oldUnknowFunTypeExecACmd)(0x1400363D8);
 int newUnknowFun_ExecACmd(DWORD Unknow1, LPCWSTR Str, LPVOID Unknow2, LPVOID Unknow3, LPVOID Unknow4)
@@ -134,6 +150,9 @@ PWCHAR newUnknow3(DWORD unknow1, DWORD unknow2, DWORD unknow3, DWORD unknow4)
 		char recordstr[1024] = { 0 };
 		WideCharToMultiByte(CP_ACP, 0, ret, -1, recordstr, sizeof(recordstr), NULL, NULL);
 		strings.push_back(std::make_pair(recordstr, true));
+		
+		strcat(recordstr, "\r\n");
+		appendLogFile(recordstr);
 	}
 	return ret;
 }
